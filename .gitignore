@@ -7,3 +7,7 @@ dist/
 *.tsbuildinfo
 
 *.tsbuildinfo
+
+frontend/.env.production
+
+frontend/.env.production
