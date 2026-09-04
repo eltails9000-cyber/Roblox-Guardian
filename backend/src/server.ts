@@ -225,6 +225,18 @@ app.get('/api/me', (request, response) => {
   });
 });
 
+app.get('/api/debug/session', (request, response) => {
+  const sessionId = getGuardianSession(request);
+
+  return response.json({
+    hasCookie: Boolean(sessionId),
+    validSession: Boolean(
+      sessionId && hasSession(guardianUser, sessionId)
+    ),
+    cookieName: sessionCookie
+  });
+});
+
 /* =========================
    REVOKE ROBLOX CONNECTION
 ========================= */
