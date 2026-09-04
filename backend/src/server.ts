@@ -24,7 +24,8 @@ import {
   hasSession,
   listEvents,
   listSessions,
-  saveConnection
+  saveConnection,
+  initializeStore
 } from './store.js';
 
 const app = express();
@@ -69,13 +70,15 @@ const sessionCookie = 'guardian_session';
 
 function getGuardianSession(
   request: express.Request
-) {
+): string | null {
   const cookie = request.headers.cookie
     ?.split(';')
     .map((part) => part.trim())
     .find(
       (part) =>
-        part.startsWith(`${sessionCookie}=`)
+        part.startsWith(
+          `${sessionCookie}=`
+        )
     );
 
   return cookie
@@ -87,18 +90,19 @@ function getGuardianSession(
     : null;
 }
 
-function isAuthenticated(
+async function isAuthenticated(
   request: express.Request
-) {
+): Promise<boolean> {
   const sessionId =
     getGuardianSession(request);
 
-  return Boolean(
-    sessionId &&
-      hasSession(
-        guardianUser,
-        sessionId
-      )
+  if (!sessionId) {
+    return false;
+  }
+
+  return hasSession(
+    guardianUser,
+    sessionId
   );
 }
 
@@ -108,7 +112,7 @@ function isAuthenticated(
 
 app.use(
   (
-    request,
+    _request,
     response,
     next
   ) => {
@@ -214,7 +218,7 @@ app.get(
          SAVE ROBLOX CONNECTION
       ========================= */
 
-      saveConnection(
+      await saveConnection(
         guardianUser,
         {
           profile:
@@ -249,7 +253,7 @@ app.get(
       ========================= */
 
       const session =
-        createSession(
+        await createSession(
           guardianUser,
           request.get(
             'user-agent'
@@ -261,12 +265,12 @@ app.get(
          ACTIVITY EVENTS
       ========================= */
 
-      addEvent(
+      await addEvent(
         guardianUser,
         'OAuth authorization'
       );
 
-      addEvent(
+      await addEvent(
         guardianUser,
         'Guardian session created'
       );
@@ -356,15 +360,18 @@ app.get(
 
 app.get(
   '/api/me',
-  (
+  async (
     request,
     response
   ) => {
-    const connection =
-      isAuthenticated(
+    const authenticated =
+      await isAuthenticated(
         request
-      )
-        ? getConnection(
+      );
+
+    const connection =
+      authenticated
+        ? await getConnection(
             guardianUser
           )
         : undefined;
@@ -390,7 +397,7 @@ app.get(
 
 app.get(
   '/api/debug/session',
-  (
+  async (
     request,
     response
   ) => {
@@ -399,18 +406,20 @@ app.get(
         request
       );
 
+    const validSession =
+      Boolean(
+        sessionId &&
+          await hasSession(
+            guardianUser,
+            sessionId
+          )
+      );
+
     return response.json({
       hasCookie:
         Boolean(sessionId),
 
-      validSession:
-        Boolean(
-          sessionId &&
-            hasSession(
-              guardianUser,
-              sessionId
-            )
-        ),
+      validSession,
 
       cookieName:
         sessionCookie
@@ -429,9 +438,9 @@ app.post(
     response
   ) => {
     if (
-      !isAuthenticated(
+      !(await isAuthenticated(
         request
-      )
+      ))
     ) {
       return response
         .status(401)
@@ -443,7 +452,7 @@ app.post(
     }
 
     const connection =
-      getConnection(
+      await getConnection(
         guardianUser
       );
 
@@ -453,11 +462,11 @@ app.post(
           connection.accessToken
       );
 
-      deleteConnection(
+      await deleteConnection(
         guardianUser
       );
 
-      addEvent(
+      await addEvent(
         guardianUser,
         'OAuth revoked'
       );
@@ -475,14 +484,14 @@ app.post(
 
 app.get(
   '/api/sessions',
-  (
+  async (
     request,
     response
   ) => {
     if (
-      !isAuthenticated(
+      !(await isAuthenticated(
         request
-      )
+      ))
     ) {
       return response
         .status(401)
@@ -495,7 +504,7 @@ app.get(
 
     return response.json({
       sessions:
-        listSessions(
+        await listSessions(
           guardianUser
         )
     });
@@ -504,14 +513,14 @@ app.get(
 
 app.delete(
   '/api/sessions/:id',
-  (
+  async (
     request,
     response
   ) => {
     if (
-      !isAuthenticated(
+      !(await isAuthenticated(
         request
-      )
+      ))
     ) {
       return response
         .status(401)
@@ -522,12 +531,12 @@ app.delete(
         });
     }
 
-    deleteSession(
+    await deleteSession(
       guardianUser,
       request.params.id
     );
 
-    addEvent(
+    await addEvent(
       guardianUser,
       'Session terminated'
     );
@@ -540,14 +549,14 @@ app.delete(
 
 app.delete(
   '/api/sessions',
-  (
+  async (
     request,
     response
   ) => {
     if (
-      !isAuthenticated(
+      !(await isAuthenticated(
         request
-      )
+      ))
     ) {
       return response
         .status(401)
@@ -558,11 +567,11 @@ app.delete(
         });
     }
 
-    deleteAllSessions(
+    await deleteAllSessions(
       guardianUser
     );
 
-    addEvent(
+    await addEvent(
       guardianUser,
       'Session terminated'
     );
@@ -579,14 +588,14 @@ app.delete(
 
 app.get(
   '/api/activity',
-  (
+  async (
     request,
     response
   ) => {
     if (
-      !isAuthenticated(
+      !(await isAuthenticated(
         request
-      )
+      ))
     ) {
       return response
         .status(401)
@@ -599,7 +608,7 @@ app.get(
 
     return response.json({
       events:
-        listEvents(
+        await listEvents(
           guardianUser
         )
     });
@@ -657,13 +666,34 @@ app.use(
    SERVER
 ========================= */
 
-app.listen(
-  4000,
-  () => {
-    console.log(
-      `Roblox Guardian backend listening on ${config.BACKEND_URL}`
+async function startServer() {
+  try {
+    await initializeStore();
+
+    app.listen(
+      4000,
+      () => {
+        console.log(
+          `Roblox Guardian backend listening on ${config.BACKEND_URL}`
+        );
+      }
     );
+
+  } catch (error) {
+    console.error(
+      '========== POSTGRESQL ERROR =========='
+    );
+
+    console.error(error);
+
+    console.error(
+      '======================================'
+    );
+
+    process.exit(1);
   }
-);
+}
+
+startServer();
 
 export { app };
