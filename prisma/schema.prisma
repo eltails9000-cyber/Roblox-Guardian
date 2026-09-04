@@ -1,0 +1,10 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+model User { id String @id @default(cuid()); createdAt DateTime @default(now()); connection RobloxConnection?; sessions GuardianSession[]; events SecurityEvent[]; preferences NotificationPreference?; verifications EmailVerification[] }
+model RobloxConnection { id String @id @default(cuid()); userId String @unique; robloxSubject String; username String?; displayName String?; avatarUrl String?; profileUrl String?; scopes String[]; connectedAt DateTime @default(now()); user User @relation(fields: [userId], references: [id], onDelete: Cascade); token OAuthToken? }
+model OAuthToken { id String @id @default(cuid()); connectionId String @unique; accessTokenEncrypted String; refreshTokenEncrypted String?; expiresAt DateTime?; connection RobloxConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade) }
+model GuardianSession { id String @id @default(cuid()); userId String; userAgent String; createdAt DateTime @default(now()); lastActive DateTime @default(now()); user User @relation(fields: [userId], references: [id], onDelete: Cascade) }
+model SecurityEvent { id String @id @default(cuid()); userId String; type String; status String; createdAt DateTime @default(now()); user User @relation(fields: [userId], references: [id], onDelete: Cascade) }
+model EmailVerification { id String @id @default(cuid()); userId String; purpose String; codeHash String; attempts Int @default(0); expiresAt DateTime; usedAt DateTime?; user User @relation(fields: [userId], references: [id], onDelete: Cascade) }
+model NotificationPreference { id String @id @default(cuid()); userId String @unique; guardianLogin Boolean @default(true); oauthAuthorization Boolean @default(true); oauthRevoked Boolean @default(true); securityConfirmation Boolean @default(true); user User @relation(fields: [userId], references: [id], onDelete: Cascade) }
